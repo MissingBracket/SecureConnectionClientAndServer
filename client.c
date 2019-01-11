@@ -64,7 +64,7 @@ int read_decrypted(int socket, struct AES_ctx context){
     if (recv(socket, plain_text, sizeof(plain_text), 0) == -1)
         return 0;
    
-    printf("Transmission received: \n");
+    //printf("Transmission received: \n");
     printf("\n");
     for (int i = 0; i < 4; ++i)
     {
@@ -73,8 +73,11 @@ int read_decrypted(int socket, struct AES_ctx context){
     char buffer[64] = {'\0'};
     memcpy(buffer, plain_text, 64);
 
-    printf("Received : %s\n", buffer);
+    if(strncmp(buffer, "EOFEOFEOF", 9) == 0)
+        return -1;
+    printf("%s", buffer);
     
+
     return 1;
 }
 
@@ -260,6 +263,10 @@ int main(int argc, char *argv[])
             close(sockfd);
             exit(0);
         }
+        while(read_decrypted(sockfd, ctx) > 0){
+
+        }
+
     }
     buf[numbytes] = '\0';
 

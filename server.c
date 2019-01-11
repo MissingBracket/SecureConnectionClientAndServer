@@ -23,8 +23,8 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
-#include "./dh.h"
-#include "./aes.h"
+#include "./dh.h"   // Implementation of Diffie - Hellman algorithm
+#include "./aes.h" // Implementation of aes alogrithm
 #include "./logger.h"
 #include "./server_messages.h"
 
@@ -45,7 +45,7 @@ void sigchld_handler(int s)
     errno = saved_errno;
 }
 
-int read_decrypted(int socket, struct AES_ctx context){
+int read_decrypted(int socket, struct AES_ctx context, char output[MAXDATASIZE]){
     uint8_t plain_text[64] = {0x00};
     if (recv(socket, plain_text, sizeof(plain_text), 0) == -1)
         return 0;    
@@ -55,6 +55,7 @@ int read_decrypted(int socket, struct AES_ctx context){
     }
     char buffer[64] = {'\0'};
     memcpy(buffer, plain_text, 64);
+    memcpy(output, plain_text, 64);
     printf("Received : %s\n", buffer);
     if(strncmp("exit", buffer, 4) == 0){
         printf("Exiting \n");
@@ -64,8 +65,9 @@ int read_decrypted(int socket, struct AES_ctx context){
 }
 
 
-char *get_output_of_command(FILE* pipe){
-    char* output = (char*)calloc(64, sizeof(char));
+char *get_output_of_command(FILE* pipe, char output[64]){
+    //char* output = (char*)calloc(64, sizeof(char));
+
     while(fgets(output, sizeof(char)*63, pipe)!= NULL){
         printf("out: %s\n", output);
         return output;
@@ -92,20 +94,21 @@ int transmit_encrypted(int socket, struct AES_ctx context, char msg[64]){
     return 1;
 }
 
-char *execute_command(int socket, struct AES_ctx context, char * comm){
+int execute_command(int socket, struct AES_ctx context, char * comm){
     FILE* pipe;
-    char* output = (char*)malloc(sizeof(char)*64);
+    char output[64];
     pipe = popen(comm, "r");
     if(pipe == NULL){
         printf("Could not read user's available commands\n");
-        return NULL;
+        return -1;
     }
-    while(get_output_of_command(pipe) != NULL){
+    while(get_output_of_command(pipe, output) != NULL){
         transmit_encrypted(socket, context, output);
-
     }
+    strncpy(output, "EOFEOFEOF", 9);
+    transmit_encrypted(socket, context, output);
     pclose(pipe);
-    return output;
+    return 1;
 }
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -170,7 +173,8 @@ int perform_authentication(int socket){
 
     printf("Received data: %s\n", buf_L);
     status = 1;
-    //  Check credentials credibility
+    //  Check credentials credibility - the crude and simple text file version 
+    //  You can insert Your own code here
     /*
     char username[MAXDATASIZE];
     char passhash[MAXDATASIZE];
@@ -304,12 +308,15 @@ int main(void){
             if(transmit_encrypted(new_fd, ctx, PROMPT) <= 0)
                 printf("Error on : encrtransmit\n");
             while(1){
-                    int stat = read_decrypted(new_fd, ctx);
+                char command_buffer[MAXDATASIZE] = {'\0'};
+                    int stat = read_decrypted(new_fd, ctx, command_buffer);
+                    //printf("Comm buf: %s\n", command_buffer);
                     if(stat  < 0){
                         printf("Client logged out.\n");
                         close(new_fd);
                         exit(0);
                     }
+                    execute_command(new_fd, ctx, command_buffer);
             }
             close(new_fd);
             exit(0);
